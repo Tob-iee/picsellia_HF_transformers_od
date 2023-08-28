@@ -1,3 +1,4 @@
+# Import required libraries
 import os
 import io
 
@@ -18,8 +19,10 @@ from transformers import Trainer, TrainerCallback, TrainingArguments
 from transformers import AutoImageProcessor
 from transformers import AutoModelForObjectDetection
 
-client = Client(api_token="b48727d3cac3bb718b00f53ab729f2ba8c45a502", organization_name="Nwoke", host="https://trial.picsellia.com")
+# Initializing Picsellia connection
+client = Client(api_token="329433da34f56dff854da2ac8795c918f710c15f", organization_name="Nwoke", host="https://trial.picsellia.com")
 
+# Retrieve the experiment
 project = client.get_project("Sample-project")
 experiment = project.get_experiment("train_dataV_experiment")
 attached_datasets = experiment.list_attached_dataset_versions()
@@ -30,9 +33,11 @@ base_imgdir = experiment.png_dir
 dataset =  client.get_dataset_by_id('0189b100-2131-772b-921d-b83210541cf7')
 dataset_version = client.get_dataset_version_by_id('0189b100-4d4b-7e81-b729-2978c654d00d')
 
+# dataset_version.download('dataset_train_version')
 labels = dataset_version .list_labels()
 label_names = [label.name for label in labels]
 labelmap = {str(i): label.name for i, label in enumerate(labels)}
+
 
 
 for data_type, dataset in {"train": dataset_version}.items():
@@ -48,6 +53,8 @@ label2id = {v: k for k, v in id2label.items()}
 
 dataset_path =  os.path.join(base_imgdir, data_type)
 images_dir = os.path.join(dataset_path, 'images')
+
+
 
 dataset_processed = []
 annotations = []
@@ -87,13 +94,16 @@ for images in images_json:
 
     dataset_processed.append(dict_of_data)
 
+
+# Preprocess, Augument and Transform Data
+# Load transformer image processor for DetrModel
 checkpoint =  "_detr-resnet-50_finetuned_cppe5/original_checkpoint"
 image_processor = AutoImageProcessor.from_pretrained(checkpoint)
 
 # image_processor.save_pretrained("_detr-resnet-50_finetuned_cppe5/image_processor")
 
 
-
+# Load albumentations library for image augumentation
 transform = albumentations.Compose(
     [
         albumentations.Resize(480, 480),
@@ -103,6 +113,8 @@ transform = albumentations.Compose(
     bbox_params=albumentations.BboxParams(format="coco", label_fields=["category"]),
 )
 
+
+# Reformats each image's annotations for to the image_processor
 def formatted_anns(image_id, category, area, bbox):
     annotations = []
     for i in range(0, len(category)):
@@ -118,6 +130,8 @@ def formatted_anns(image_id, category, area, bbox):
     return annotations
 
 
+# Transforming a batch of images
+# It auguments images using albumentations and preprocess images with image_processor
 def transform_aug_ann(example):
     ids_, images, bboxes, area, categories = [], [], [], [], []
 
@@ -146,6 +160,7 @@ def transform_aug_ann(example):
 
     return pixel_values, target
 
+
 def collate_fn(batch):
     pixel_values = [item[0] for item in batch]
     encoding = image_processor.pad(pixel_values, return_tensors="pt")
@@ -167,7 +182,7 @@ experiment.log("labelmap", id2label, type= LogType.TABLE, replace=True)
 
 cwd = os.getcwd()
 
-
+# Training the DETR model
 model = AutoModelForObjectDetection.from_pretrained(
     checkpoint,
     id2label=id2label,
