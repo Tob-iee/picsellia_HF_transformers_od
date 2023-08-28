@@ -1,0 +1,6 @@
+datasets
+transformers
+evaluate
+timm
+albumentations
+transformers[torch]
