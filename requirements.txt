@@ -1,6 +1,9 @@
 datasets
 transformers
+# git+https://github.com/huggingface/transformers
 evaluate
 timm
 albumentations
 transformers[torch]
+evaluate
+picsellia
