@@ -11,7 +11,7 @@ import detr
 import processor_picsellia_utils
 
 project_name="Sample-project"
-experiment_name="train_dataV_experiment"
+experiment_name="DETR_huggingface_transformer"
 train_version_name="training"
 eval_version_name="eval"
 train_set_local_dir="train_dataset_version"
@@ -22,7 +22,7 @@ cwd = os.getcwd()
 
 
 # Initializing Picsellia connection
-client = Client(api_token="329433da34f56dff854da2ac8795c918f710c15f", organization_name="Nwoke", host="https://trial.picsellia.com")
+client = Client(api_token="", organization_name="Nwoke", host="https://trial.picsellia.com")
 
 # Retrieve the experiment
 project = client.get_project(project_name)
@@ -106,8 +106,8 @@ model = AutoModelForObjectDetection.from_pretrained(
 training_args = TrainingArguments(
     output_dir="detr-resnet-50_finetuned_cppe5",
     # overwrite_output_dir= ,
-    per_device_train_batch_size=4,
-    num_train_epochs=30,
+    per_device_train_batch_size=8,
+    num_train_epochs=40,
     fp16=False,
     save_steps=200,
     logging_steps=10,
