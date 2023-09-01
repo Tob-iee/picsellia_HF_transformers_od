@@ -16,7 +16,7 @@ train_version_name="training"
 eval_version_name="eval"
 train_set_local_dir="train_dataset_version"
 eval_set_local_dir="eval_dataset_version"
-finetuned_output_dir="finetuned_detr-resnet-50_"
+finetuned_output_dir="finetuned_detr"
 coco_annotations_path = "train_annotations.json"
 cwd = os.getcwd()
 
@@ -103,7 +103,6 @@ model = AutoModelForObjectDetection.from_pretrained(
 )
 
 
-
 training_args = TrainingArguments(
     output_dir="detr-resnet-50_finetuned_cppe5",
     # overwrite_output_dir= ,
@@ -139,7 +138,6 @@ trainer = Trainer(
 trainer.train()
 trainer.save_model(finetuned_output_dir)
 finetuned_model_path = os.path.join(os.getcwd(), finetuned_output_dir)
-# experiment.store("model-latest", finetuned_model_path, zip=True)
 
 processor_picsellia_utils.finetuned_model_to_picsellia(experiment, cwd, save_dir=finetuned_output_dir)
 
