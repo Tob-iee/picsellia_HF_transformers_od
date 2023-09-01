@@ -1,93 +1,110 @@
 import os
+import json
+import numpy as np
+import torchvision
+from pycocotools.coco import COCO
 
 
-def setup_hyp(
-    experiment=None,
-    data_json_path=None,
-    params={},
-    cwd=None,
-    task="detect",
-):
+def coco_format_loader(train_dataset_version, label_names, coco_annotations_path):
+    coco_annotation = train_dataset_version.build_coco_file_locally(
+            enforced_ordered_categories=label_names
+        )
 
-    opt = Opt()
+    annotations_dict = coco_annotation.dict()
 
-    opt.task = task
-    opt.mode = "train"
-    opt.cwd = cwd
-    
-    # Train settings -------------------------------------------------------------------------------------------------------
-    # opt.model = weight_path
-    opt.data = data_json_path
-    opt.epochs = 100 if not "num_train_epochs" in params.keys() else params["num_train_epochs"]
-    opt.batch = 8 if not "per_device_train_batch_size" in params.keys() else params["per_device_train_batch_size"]
-    # opt.imgsz = 640 if not "input_shape" in params.keys() else params["input_shape"]
-    opt.save = True
-    # opt.save_period = (
-    #     100 if not "save_period" in params.keys() else params["save_period"]
-    # )
-    opt.fp16 = True if not "fp16" in params.keys() else params["fp16"]
-    opt.cache = False
-    opt.device = "0" if "gpu" else "cpu"
-    opt.project = cwd
-    opt.name = "exp"
-    opt.exist_ok = False
-    opt.pretrained = True
-    opt.optimizer = "Adam"
-    opt.logging_steps = 50
-    opt.logging_dir = cwd if not "logging_dir" in params.keys() else params["logging_dir"]
+    with open(coco_annotations_path, "w") as f:
+        f.write(json.dumps(annotations_dict))
 
-    # Hyperparameters ------------------------------------------------------------------------------------------------------
-    opt.lr0 = 0.01  if not "learning_rate" in params.keys() else params["learning_rate"] # initial learning rate (i.e. SGD=1E-2, Adam=1E-3)
-    # opt.lrf = 0.01  # final learning rate (lr0 * lrf)
-    opt.momentum = 0.937  # SGD momentum/Adam beta1
-    opt.weight_decay = 0.0005  if not "weight_decay" in params.keys() else params["weight_decay"]  # optimizer weight decay 5e-4
-    opt.lr_scheduler_type = "linear" if not "lr_scheduler_type" in params.keys() else params["lr_scheduler_type"]
-    opt.warmup_steps = 0.0  # warmup steop
-
-    return opt
-
-class Opt:
-    pass
+    annotations_coco = COCO(coco_annotations_path)
+    return annotations_coco
 
 
+class CocoDetection(torchvision.datasets.CocoDetection):
+    def __init__(self, img_folder,ann_file, processor, transform, train=True):
+        # ann_file = "0189b100-4d4b-7e81-b729-2978c654d00d_annotations.json"
+        super(CocoDetection, self).__init__(img_folder, ann_file)
+        self.processor = processor
+        self.transform = transform
 
-# def send_run_to_picsellia(experiment, cwd, save_dir=None, imgsz=640):
-#     if save_dir is not None:
-#         final_run_path=save_dir
-#     else:
-#         final_run_path = find_final_run(cwd)
-#     best_weigths, hyp_yaml = get_weights_and_config(final_run_path)
+    def __getitem__(self, idx):
+        # read in PIL image and target in COCO format
+        # feel free to add data augmentation here before passing them to the next step
+        img, target = super(CocoDetection, self).__getitem__(idx)
 
-#     model_latest_path = os.path.join(final_run_path, 'weights', 'best.onnx')
-#     model_dir = os.path.join(final_run_path, 'weights')
-#     if os.path.isfile(os.path.join(model_dir, "best.onnx")):
-#         model_latest_path = os.path.join(model_dir, "best.onnx")
-#     elif os.path.isfile(os.path.join(model_dir, "last.onnx")):
-#         model_latest_path = os.path.join(model_dir, "last.onnx")
-#     elif os.path.isfile(os.path.join(model_dir, "best.pt")):
-#         checkpoint_path = os.path.join(model_dir, 'best.pt')
-#         model = YOLO(checkpoint_path)
-#         model.export(format='onnx', imgsz=imgsz, task='detect')
-#         model_latest_path = os.path.join(final_run_path, 'weights', 'best.onnx')
-#     elif not os.path.isfile(os.path.join(model_dir, "last.pt")):
-#         checkpoint_path = os.path.join(model_dir, 'last.pt')
-#         model = YOLO(checkpoint_path)
-#         model.export(format='onnx', imgsz=imgsz, task='detect')
-#         model_latest_path = os.path.join(final_run_path, 'weights', 'last.onnx')
-#     else:
-#         logging.warning("Can't find last checkpoints to be uploaded")
-#         model_latest_path = None
-#     if model_latest_path is not None:
-#         experiment.store('model-latest', model_latest_path)
-#     if best_weigths is not None:
-#         experiment.store('checkpoint-index-latest', best_weigths)
-#     if hyp_yaml is not None:
-#         experiment.store('checkpoint-data-latest', hyp_yaml)
-#     for curve in get_metrics_curves(final_run_path):
-#         if curve is not None:
-#             name = curve.split('/')[-1].split('.')[0]
-#             experiment.log(name, curve, LogType.IMAGE)
-#     for batch in get_batch_mosaics(final_run_path):
-#         if batch is not None:
-#             name = batch.split('/')[-1].split('.')[0]
-#             experiment.log(name, batch, LogType.IMAGE)
+        ids_list, area_list, bboxes_list, categories_list = [], [], [], []
+
+        for objects in target:
+            ids_list.append(objects["id"])
+            area_list.append(objects["area"])
+            bboxes_list.append(objects["bbox"])
+            categories_list.append(objects["category_id"])
+
+        dict_of_data = {'image_id': self.ids[idx],
+                        'image': img,
+                        'objects': {'id': ids_list,
+                            'areas': area_list,
+                            'bboxes': bboxes_list,
+                            'category_ids': categories_list}}
+
+
+        # Transforming a batch of images
+        # It auguments images using albumentations and preprocess images with image_processor
+        ids_trans, images_trans, bboxes_trans, area_trans, categories_trans = [], [], [], [], []
+
+        image_ids = dict_of_data["image_id"]
+
+        objects =  dict_of_data["objects"]
+        image = dict_of_data["image"]
+
+        image = np.array(image.convert("RGB"))[:, :, ::-1]
+        out = self.transform(image=image, bboxes=objects["bboxes"], category=objects["category_ids"])
+
+        ids_trans.append(objects["id"])
+        area_trans.append(objects["areas"])
+        images_trans.append(out["image"])
+        bboxes_trans.append(out["bboxes"])
+        categories_trans.append(out["category"])
+
+        # Reformats each image's annotations(targets) for the image_processor
+        targets = [
+                  {"image_id": image_ids, "annotations": self.formatted_anns(ids_, cat_, ar_, box_)}
+                  for ids_, cat_, ar_, box_ in zip(ids_trans, categories_trans, area_trans, bboxes_trans)
+                  ]
+
+        # preprocess image and target (converting target to DETR format, resizing + normalization of both image and target)
+        encoding = self.processor(images=images_trans, annotations=targets, return_tensors="pt")
+        pixel_values = encoding["pixel_values"].squeeze() # remove batch dimension
+        target_lab = encoding["labels"][0] # remove batch dimension
+
+        return pixel_values, target_lab
+
+
+
+
+    def formatted_anns(self, image_id, category, area, bbox):
+        annotations = []
+        for i in range(0, len(category)):
+            new_ann = {
+                "image_id": image_id[i],
+                "category_id": category[i],
+                "isCrowd": 0,
+                "area": area[i],
+                "bbox": list(bbox[i]),
+            }
+            annotations.append(new_ann)
+
+        return annotations
+
+
+def send_run_to_picsellia(experiment, cwd, save_dir=None):
+
+    model_latest_path = os.path.join(cwd, save_dir)
+    file_list = os.listdir(model_latest_path)
+    print(file_list)
+
+    for files in file_list:
+      model_latest_files = os.path.join(model_latest_path, files)
+      experiment.store(files, model_latest_files)
+
+
+
