@@ -26,11 +26,9 @@ class CustomPicselliaCallback(TrainerCallback):
         """
         Event called at the end of training.
         """
+        # Keep track of train and evaluate loss.'
         print("state.log_history:", state.log_history)
 
-
-        # Keep track of train and evaluate loss.
-        # loss_history = {'train_loss':[]}
         # Loop through each log history.
         for log_history in state.log_history:
             if 'loss' in log_history.keys():
@@ -46,9 +44,6 @@ class CustomPicselliaCallback(TrainerCallback):
                     self._log_metric("lr-decay_hist", learning_rate_decay,  LogType.LINE)
                 except Exception as e:
                     print("can't send log")
-
-
-      # self._log_metric("loss_training", loss_history['train_loss'],  LogType.LINE)
 
 
     def _log_metric(self, name: str, value: float, retry: int):

@@ -9,33 +9,34 @@ from transformers import AutoImageProcessor, AutoModelForObjectDetection
 
 import detr
 import processor_picsellia_utils
+from processor_picsellia_utils import get_experiment
 
-project_name="Sample-project"
-experiment_name="DETR_huggingface_transformer"
-train_version_name="training"
+# project_name="Sample-project"
+# experiment_name="DETR_huggingface_transformer"
+train_version_name="train"
 eval_version_name="eval"
 train_set_local_dir="train_dataset_version"
 eval_set_local_dir="eval_dataset_version"
-finetuned_output_dir="finetuned_detr"
+finetuned_output_dir = os.environ["finetuned_output_dir"]
+# finetuned_output_dir="finetuned_detr-resnet-50_"
 coco_annotations_path = "train_annotations.json"
+finetuned_output_dir
+# model_version_no = os.environ["model_version_no"]
+# model_version_no = 1
 cwd = os.getcwd()
 
 
 # Initializing Picsellia connection
-client = Client(api_token="", organization_name="Nwoke", host="https://trial.picsellia.com")
+# client = Client(api_token="", organization_name="Nwoke", host="https://trial.picsellia.com")
 
-# Retrieve the experiment
-project = client.get_project(project_name)
-experiment = project.get_experiment(experiment_name)
+# Retrieve the experiment and dataset versions
+# project = client.get_project(project_name)
+# experiment = project.get_experiment(experiment_name)
+experiment = get_experiment()
 attached_datasets = experiment.list_attached_dataset_versions()
 train_dataset_version = experiment.get_dataset(train_version_name)
 eval_dataset_version = experiment.get_dataset(eval_version_name)
-
 images_dir = os.path.join(os.getcwd(), train_set_local_dir)
-
-labels = train_dataset_version.list_labels()
-label_names = [label.name for label in labels]
-labelmap = {str(i): label.name for i, label in enumerate(labels)}
 
 
 if os.path.isdir(train_set_local_dir):
@@ -50,6 +51,8 @@ else:
   eval_dataset_version.download(eval_set_local_dir)
 
 
+labels = train_dataset_version.list_labels()
+label_names = [label.name for label in labels]
 
 # Prepare Data in COCO Format
 annotations_coco = processor_picsellia_utils.coco_format_loader(train_dataset_version, label_names, coco_annotations_path)
@@ -106,8 +109,8 @@ model = AutoModelForObjectDetection.from_pretrained(
 training_args = TrainingArguments(
     output_dir="detr-resnet-50_finetuned_cppe5",
     # overwrite_output_dir= ,
-    per_device_train_batch_size=8,
-    num_train_epochs=40,
+    per_device_train_batch_size=4,
+    num_train_epochs=50,
     fp16=False,
     save_steps=200,
     logging_steps=10,
@@ -136,6 +139,7 @@ trainer = Trainer(
 
 
 trainer.train()
+
 trainer.save_model(finetuned_output_dir)
 finetuned_model_path = os.path.join(os.getcwd(), finetuned_output_dir)
 
@@ -143,3 +147,5 @@ processor_picsellia_utils.finetuned_model_to_picsellia(experiment, cwd, save_dir
 
 detr.picsellia_detr_evaluator(experiment, eval_set_local_dir, eval_version_name, label_names, finetuned_output_dir)
 experiment.compute_evaluations_metrics(inference_type=InferenceType.OBJECT_DETECTION)
+
+processor_picsellia_utils.save_model_version(experiment)

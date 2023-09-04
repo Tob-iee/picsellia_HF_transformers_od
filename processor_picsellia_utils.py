@@ -3,6 +3,8 @@ import json
 import numpy as np
 import torchvision
 from pycocotools.coco import COCO
+from picsellia import Client
+from picsellia.types.enums import InferenceType, Framework
 
 
 def coco_format_loader(train_dataset_version, label_names, coco_annotations_path):
@@ -105,4 +107,96 @@ def finetuned_model_to_picsellia(experiment, cwd, save_dir=None):
         experiment.store(files, model_latest_files)
 
 
+def save_model_version(experiment):
+    model_name = "detr-resnet-50_"
+    model_description = "Finetuned DETR model"
 
+    if 'api_token' not in os.environ:
+        raise Exception("You must set an api_token to run this image")
+    api_token = os.environ["api_token"]
+
+    if "host" not in os.environ:
+        host = "https://trial.picsellia.com"
+    else:
+        host = os.environ["host"]
+
+    if "organization_name " not in os.environ:
+        organization_name = None
+    else:
+        organization_name = os.environ["organization_name"]
+
+    client = Client(
+        api_token=api_token,
+        host=host,
+        organization_name=organization_name
+    )
+
+    try:
+        my_model = client.create_model(
+        name=model_name,
+        description=model_description,
+        )
+    except:
+         # Get the model that will receive this new version
+        my_model = client.get_model(
+        name=model_name,
+        )
+
+    # Get the model that will receive this new version
+    my_model = client.get_model(
+    name=model_name,
+    )
+
+
+    experiment.export_in_existing_model(my_model)
+
+    # # Define the model version Inference type
+    # inference_type = InferenceType.OBJECT_DETECTION
+
+    # # Define the model version Framework
+    # framework = Framework.PYTORCH
+
+    # model_version = my_model.create_version(
+    # name=f'{model_name}v{model_version_no}', # <- The name of your ModelVersion
+    # labels=labelmap,
+    # type=inference_type,
+    # framework=framework
+    # )
+
+    # model_version = my_model.get_version(f'{model_name}v{str(model_version_no)}')
+    # model_version.store(f"model-version_{model_version_no}", fine_tuned_model_path, do_zip=True)
+
+def get_experiment():
+    if 'api_token' not in os.environ:
+        raise Exception("You must set an api_token to run this image")
+    api_token = os.environ["api_token"]
+
+    if "host" not in os.environ:
+        host = "https://trial.picsellia.com"
+    else:
+        host = os.environ["host"]
+
+    if "organization_name " not in os.environ:
+        organization_name = None
+    else:
+        organization_name = os.environ["organization_name"]
+
+    client = Client(
+        api_token=api_token,
+        host=host,
+        organization_name=organization_name
+    )
+
+    # Retrieve experiment & dataset versions
+    if "experiment_name" in os.environ:
+        experiment_name = os.environ["experiment_name"]
+        if "project_token" in os.environ:
+            project_token = os.environ["project_token"]
+            project = client.get_project_by_id(project_token)
+        elif "project_name" in os.environ:
+            project_name = os.environ["project_name"]
+            project = client.get_project(project_name)
+        experiment = project.get_experiment(experiment_name)
+    else:
+        raise Exception("You must set the project_token or project_name and experiment_name")
+    return experiment
